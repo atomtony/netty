@@ -81,6 +81,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         for (int i = 0; i < nThreads; i ++) {
             boolean success = false;
             try {
+                // 创建但线程的NioEventLoop，newChild实现方法在NioEventLoopGroup
                 children[i] = newChild(executor, args);
                 success = true;
             } catch (Exception e) {
@@ -108,6 +109,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
+        // 创建事件执行选择器
         chooser = chooserFactory.newChooser(children);
 
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {

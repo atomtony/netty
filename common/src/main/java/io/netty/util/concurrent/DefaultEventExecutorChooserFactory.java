@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Default implementation which uses simple round-robin to choose next {@link EventExecutor}.
  */
 @UnstableApi
+// 默认事件执行选择器工厂
 public final class DefaultEventExecutorChooserFactory implements EventExecutorChooserFactory {
 
     public static final DefaultEventExecutorChooserFactory INSTANCE = new DefaultEventExecutorChooserFactory();
@@ -39,10 +40,12 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         }
     }
 
+    // 2的阶乘判断函数
     private static boolean isPowerOfTwo(int val) {
         return (val & -val) == val;
     }
 
+    // 当线程数是2的阶乘时，如2、4、8、16、32...等，2的阶乘事件执行器选择器
     private static final class PowerOfTwoEventExecutorChooser implements EventExecutorChooser {
         private final AtomicInteger idx = new AtomicInteger();
         private final EventExecutor[] executors;
@@ -57,6 +60,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         }
     }
 
+    // 轮训调度事件执行选则器
     private static final class GenericEventExecutorChooser implements EventExecutorChooser {
         private final AtomicInteger idx = new AtomicInteger();
         private final EventExecutor[] executors;
