@@ -144,6 +144,8 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     @Override
     protected int doReadMessages(List<Object> buf) throws Exception {
+        //ServerSocketChannel只接收OP_ACCEPT一种事件，
+        // 然后创建子ScoketChannel进行监听OP_READ和OP_WRITE事件
         SocketChannel ch = SocketUtils.accept(javaChannel());
 
         try {
