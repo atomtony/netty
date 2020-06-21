@@ -72,6 +72,8 @@ public class ProtobufVarint32LengthFieldPrepender extends MessageToByteEncoder<B
      * @param value which is to be encoded.
      * @return size of value encoded as protobuf varint32.
      */
+
+    // 编码长度字段，长度字段是可变长的
     static int computeRawVarint32Size(final int value) {
         if ((value & (0xffffffff <<  7)) == 0) {
             return 1;

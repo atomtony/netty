@@ -26,14 +26,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * A {@link ThreadFactory} implementation with a simple naming rule.
  */
+//默认线程工厂
 public class DefaultThreadFactory implements ThreadFactory {
 
+    // 全局线程工厂自增ID
     private static final AtomicInteger poolId = new AtomicInteger();
-
+    // 工厂创建线程自增ID，局部的变量
     private final AtomicInteger nextId = new AtomicInteger();
+    //线程组前缀，形如：nioEventLoopGroup-1-
     private final String prefix;
+    // 是否为后台线程
     private final boolean daemon;
+    // 线程优先级
     private final int priority;
+    // 线程组
     protected final ThreadGroup threadGroup;
 
     public DefaultThreadFactory(Class<?> poolType) {
@@ -67,6 +73,7 @@ public class DefaultThreadFactory implements ThreadFactory {
     public static String toPoolName(Class<?> poolType) {
         ObjectUtil.checkNotNull(poolType, "poolType");
 
+        // 返回类名称
         String poolName = StringUtil.simpleClassName(poolType);
         switch (poolName.length()) {
             case 0:
@@ -74,6 +81,7 @@ public class DefaultThreadFactory implements ThreadFactory {
             case 1:
                 return poolName.toLowerCase(Locale.US);
             default:
+                //判断线程池第一个字母大小，第二个字母小写，如果ture，首字母转小写后返回，false则原样返回
                 if (Character.isUpperCase(poolName.charAt(0)) && Character.isLowerCase(poolName.charAt(1))) {
                     return Character.toLowerCase(poolName.charAt(0)) + poolName.substring(1);
                 } else {

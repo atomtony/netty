@@ -40,6 +40,7 @@ import java.util.List;
  * @see CodedInputStream
  * @see CodedInputByteBufferNano
  */
+// Varint = 长度字段的长读可变，值越小数字使用最少的字段。
 public class ProtobufVarint32FrameDecoder extends ByteToMessageDecoder {
 
     // TODO maxFrameLength + safe skip + fail-fast option
@@ -70,6 +71,7 @@ public class ProtobufVarint32FrameDecoder extends ByteToMessageDecoder {
      *
      * @return decoded int if buffers readerIndex has been forwarded else nonsense value
      */
+    // 解析长度的方法
     private static int readRawVarint32(ByteBuf buffer) {
         if (!buffer.isReadable()) {
             return 0;

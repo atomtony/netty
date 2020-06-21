@@ -114,7 +114,10 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
             offset = 0;
         }
 
+        // 带有extension
         if (extensionRegistry == null) {
+            // getParserForType方法是在protobuf2.5以上版本才有的。
+            // 有PARSER方法，getParserForType()方法解析
             if (HAS_PARSER) {
                 out.add(prototype.getParserForType().parseFrom(array, offset, length));
             } else {

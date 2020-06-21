@@ -54,6 +54,7 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
 
     @Override
     protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+        // 此时解码出来的还是byteBuf对象
         Object decoded = decode(ctx, in);
         if (decoded != null) {
             out.add(decoded);
@@ -70,9 +71,11 @@ public class FixedLengthFrameDecoder extends ByteToMessageDecoder {
      */
     protected Object decode(
             @SuppressWarnings("UnusedParameters") ChannelHandlerContext ctx, ByteBuf in) throws Exception {
+        // 当数据小于帧长度时，返回null，不进行解析
         if (in.readableBytes() < frameLength) {
             return null;
         } else {
+            // 当数据大于帧长度时，解析数据，多出来数据还在bytebuf里面
             return in.readRetainedSlice(frameLength);
         }
     }

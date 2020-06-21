@@ -479,12 +479,14 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 final int ioRatio = this.ioRatio;
                 boolean ranTasks;
                 if (ioRatio == 100) {
+                    // 入股比例是100，每次先处理完IO事件，然后处理所有任务
                     try {
                         if (strategy > 0) {
                             processSelectedKeys();
                         }
                     } finally {
                         // Ensure we always run tasks.
+                        // 执行所有任务
                         ranTasks = runAllTasks();
                     }
                 } else if (strategy > 0) {
@@ -493,7 +495,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
+                        // 计算除处理IO所用的时间
                         final long ioTime = System.nanoTime() - ioStartTime;
+                        // 格式换一下更好理解，（ioTime/ioRatio)*(100-ioRatio),
+                        // 处理IO的时间处理IO比例就是总时间，总时间乘以处理任务的比例，就是处理任务的时间
                         ranTasks = runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
                 } else {
@@ -637,16 +642,21 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+
+    // 被优化后的SelectionKey存在一个自动扩容的数组中。
     private void processSelectedKeysOptimized() {
         for (int i = 0; i < selectedKeys.size; ++i) {
+            // 根据下标索引访问SelectionKey。
             final SelectionKey k = selectedKeys.keys[i];
             // null out entry in the array to allow to have it GC'ed once the Channel close
             // See https://github.com/netty/netty/issues/2363
             selectedKeys.keys[i] = null;
 
+            // 获取当前附加对象
             final Object a = k.attachment();
 
             if (a instanceof AbstractNioChannel) {
+                // 附加对象是AbstractNioChannel时，则处理IO事件
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {
                 @SuppressWarnings("unchecked")
@@ -668,6 +678,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
         final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
         if (!k.isValid()) {
+            // 无效的SelectionKey
             final EventLoop eventLoop;
             try {
                 eventLoop = ch.eventLoop();
@@ -683,15 +694,19 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // See https://github.com/netty/netty/issues/5125
             if (eventLoop == this) {
                 // close the channel if the key is not valid anymore
+                // void close(ChannelPromise promise);方法在AbstractUnsafe类中
                 unsafe.close(unsafe.voidPromise());
             }
             return;
         }
 
         try {
+            // 获取操作集
             int readyOps = k.readyOps();
             // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
             // the NIO JDK channel implementation may throw a NotYetConnectedException.
+
+            // 判断是否链接操作
             if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
@@ -699,10 +714,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 ops &= ~SelectionKey.OP_CONNECT;
                 k.interestOps(ops);
 
+                // finishConnect()最终实现方法在AbstractNioUnsafe类中
                 unsafe.finishConnect();
             }
 
             // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
+            // 判断写操作
             if ((readyOps & SelectionKey.OP_WRITE) != 0) {
                 // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
                 ch.unsafe().forceFlush();
@@ -710,6 +727,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
+
+            // 判断接收和读操作
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
                 unsafe.read();
             }

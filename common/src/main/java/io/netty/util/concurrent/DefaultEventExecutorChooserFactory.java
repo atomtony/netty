@@ -33,6 +33,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
     @SuppressWarnings("unchecked")
     @Override
     public EventExecutorChooser newChooser(EventExecutor[] executors) {
+        // 判断是否是2的幂次方
         if (isPowerOfTwo(executors.length)) {
             return new PowerOfTwoEventExecutorChooser(executors);
         } else {
@@ -40,12 +41,12 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         }
     }
 
-    // 2的阶乘判断函数
+    // 2的幂次方判断函数
     private static boolean isPowerOfTwo(int val) {
         return (val & -val) == val;
     }
 
-    // 当线程数是2的阶乘时，如2、4、8、16、32...等，2的阶乘事件执行器选择器
+    // 当线程数是2的幂次方，如2、4、8、16、32...等，2的幂次方事件执行器选择器
     private static final class PowerOfTwoEventExecutorChooser implements EventExecutorChooser {
         private final AtomicInteger idx = new AtomicInteger();
         private final EventExecutor[] executors;
