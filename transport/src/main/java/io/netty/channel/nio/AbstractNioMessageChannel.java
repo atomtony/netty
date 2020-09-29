@@ -82,6 +82,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                             break;
                         }
 
+                        // 记录创建此处
                         allocHandle.incMessagesRead(localRead);
                     } while (allocHandle.continueReading());
                 } catch (Throwable t) {

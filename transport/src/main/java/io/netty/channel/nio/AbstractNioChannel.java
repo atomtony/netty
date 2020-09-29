@@ -377,6 +377,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         boolean selected = false;
         for (;;) {
             try {
+                // 将channel绑定到selector
+                // 这里的register最有一个参数attachment，非常重要
+                // 当注册的事件触发时，会用attachment这个参数进行处理
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {
@@ -410,6 +413,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         readPending = true;
 
         final int interestOps = selectionKey.interestOps();
+        // 假设之前没有监听readInterestOp，则监听readInterestOp
+        // 注册读事件(OP_READ)到 selector 上。
         if ((interestOps & readInterestOp) == 0) {
             selectionKey.interestOps(interestOps | readInterestOp);
         }

@@ -779,9 +779,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         final long nanoTime = ScheduledFutureTask.nanoTime();
 
         if (isShutdown() || nanoTime - gracefulShutdownStartTime > gracefulShutdownTimeout) {
+            // 超过静默期，返回ture 关闭
             return true;
         }
 
+        // 如果静默期做了任务，这不关闭，sleep 100 毫秒，在检查下
         if (nanoTime - lastExecutionTime <= gracefulShutdownQuietPeriod) {
             // Check if any tasks were added to the queue every 100ms.
             // TODO: Change the behavior of takeTask() so that it returns on timeout.
@@ -797,6 +799,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
         // No tasks were added for last quiet period - hopefully safe to shut down.
         // (Hopefully because we really cannot make a guarantee that there will be no execute() calls by a user.)
+        // 静默期没有做任务，返回需要关闭
         return true;
     }
 
@@ -975,6 +978,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void doStartThread() {
         assert thread == null;
+        // 创建nioEventLoop线程并start，执行 SingleThreadEventExecutor.this.run();
         executor.execute(new Runnable() {
             @Override
             public void run() {
@@ -1033,6 +1037,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                         confirmShutdown();
                     } finally {
                         try {
+                            // 关闭selector
                             cleanup();
                         } finally {
                             // Lets remove all FastThreadLocals for the Thread as we are about to terminate and notify

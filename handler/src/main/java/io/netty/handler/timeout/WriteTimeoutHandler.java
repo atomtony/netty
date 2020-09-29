@@ -200,6 +200,7 @@ public class WriteTimeoutHandler extends ChannelOutboundHandlerAdapter {
             // Was not written yet so issue a write timeout
             // The promise itself will be failed with a ClosedChannelException once the close() was issued
             // See https://github.com/netty/netty/issues/2159
+            // 判断写是否完成
             if (!promise.isDone()) {
                 try {
                     writeTimedOut(ctx);

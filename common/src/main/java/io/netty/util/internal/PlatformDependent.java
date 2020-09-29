@@ -198,6 +198,9 @@ public final class PlatformDependent {
         }
 
         // We should always prefer direct buffers by default if we can use a Cleaner to release direct buffers.
+        // 使用对外内存两个条件
+        // 1. 有cleaner方法去释放堆外内存
+        // 2. io.netty.noPreferDirect 不设置为 ture
         DIRECT_BUFFER_PREFERRED = CLEANER != NOOP
                                   && !SystemPropertyUtil.getBoolean("io.netty.noPreferDirect", false);
         if (logger.isDebugEnabled()) {

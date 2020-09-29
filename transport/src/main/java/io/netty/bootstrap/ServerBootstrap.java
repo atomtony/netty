@@ -129,7 +129,9 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) {
+        // 对创建的channel设置参数，这里channel其实是ServerSocketChannel
         setChannelOptions(channel, newOptionsArray(), logger);
+        // 对创建的channel设置属性，这里channel其实是ServerSocketChannel
         setAttributes(channel, attrs0().entrySet().toArray(EMPTY_ATTRIBUTE_ARRAY));
 
         ChannelPipeline p = channel.pipeline();
@@ -138,10 +140,14 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         final ChannelHandler currentChildHandler = childHandler;
         final Entry<ChannelOption<?>, Object>[] currentChildOptions;
         synchronized (childOptions) {
+            // 对客户段连接创建的SocketChannel设置参数封装
             currentChildOptions = childOptions.entrySet().toArray(EMPTY_OPTION_ARRAY);
         }
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = childAttrs.entrySet().toArray(EMPTY_ATTRIBUTE_ARRAY);
 
+        // ChannelInitializer一次性、初始化handler
+        // 负责添加ServerBootstrapAcceptor handler，添加完成后，自己就移除
+        // ServerBootstrapAcceptor handler：负责接手客户端连接后，对连接的初始化工作
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
             public void initChannel(final Channel ch) {
@@ -211,6 +217,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
             child.pipeline().addLast(childHandler);
 
+            // 对客户段连接设置参数和属性
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
 

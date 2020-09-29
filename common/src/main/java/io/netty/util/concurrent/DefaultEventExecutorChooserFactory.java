@@ -57,6 +57,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
 
         @Override
         public EventExecutor next() {
+            // “-” 优先级高于 “&”
             return executors[idx.getAndIncrement() & executors.length - 1];
         }
     }

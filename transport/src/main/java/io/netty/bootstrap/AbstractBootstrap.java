@@ -269,12 +269,14 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        // 将channel的SelectionKey.OP_ACCEPT事件事件注册到selector上
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
             return regFuture;
         }
 
+        // 不能肯定register完成，因为register是丢到NioEventLoop里执行了
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
@@ -283,6 +285,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
+            // 等着register完成来通知在执行bind
             regFuture.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
@@ -296,6 +299,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
                         // See https://github.com/netty/netty/issues/2586
                         promise.registered();
 
+                        // 前面只是将channel注册到selector上，并没有绑定端口号，
+                        // 下边是绑定端口到channel对应的javaChannel上
                         doBind0(regFuture, channel, localAddress, promise);
                     }
                 }
@@ -307,7 +312,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            // 泛型反射加工厂创建channel
             channel = channelFactory.newChannel();
+            // 对channel参数和属性设置
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -320,8 +327,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
-        // 开始注册，服务器端指的是ServerSocketChannel，则会注册到bossEventLoopGroup
-        // 如果是子SocketChannel则会注册到workerEventLoopGroup
+        // 开始注册，服务器端指的是ServerSocketChannel，则会注册到 parentEventLoopGroup
+        // 如果是子 SocketChannel 则会注册到 childEventLoopGroup
+        // 创建并启动nioEventLoop线程
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {

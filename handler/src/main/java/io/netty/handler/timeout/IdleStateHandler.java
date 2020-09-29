@@ -317,7 +317,9 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         state = 1;
         initOutputChanged(ctx);
 
+        // 初始化读和写时间，单位纳秒
         lastReadTime = lastWriteTime = ticksInNanos();
+        // 创建各种idle监控任务
         if (readerIdleTimeNanos > 0) {
             readerIdleTimeout = schedule(ctx, new ReaderIdleTimeoutTask(ctx),
                     readerIdleTimeNanos, TimeUnit.NANOSECONDS);
@@ -413,6 +415,10 @@ public class IdleStateHandler extends ChannelDuplexHandler {
      */
     private boolean hasOutputChanged(ChannelHandlerContext ctx, boolean first) {
         if (observeOutput) {
+            // 正常情况下，返回false，即写空闲的判断中的写成功，但实际上，有可能遇到几种情况
+            // 1. 写了，但是缓存区满了，写不出去
+            // 2. 写了一个"大数据"，写确实在"动",但是没yogi写完
+            // 所以这个参数，判断是否有"写的意图"，而不是判断“是否写成功”
 
             // We can take this shortcut if the ChannelPromises that got passed into write()
             // appear to complete. It indicates "change" on message level and we simply assume
@@ -433,10 +439,14 @@ public class IdleStateHandler extends ChannelDuplexHandler {
             ChannelOutboundBuffer buf = unsafe.outboundBuffer();
 
             if (buf != null) {
+                // 待发送缓存哈稀值
                 int messageHashCode = System.identityHashCode(buf.current());
+                // 待发送字节数
                 long pendingWriteBytes = buf.totalPendingWriteBytes();
 
+                // 比较上次记录的缓存哈稀值和字节数相等
                 if (messageHashCode != lastMessageHashCode || pendingWriteBytes != lastPendingWriteBytes) {
+                    // 不相等重新记录
                     lastMessageHashCode = messageHashCode;
                     lastPendingWriteBytes = pendingWriteBytes;
 
@@ -445,8 +455,10 @@ public class IdleStateHandler extends ChannelDuplexHandler {
                     }
                 }
 
+                // 当前缓存进度
                 long flushProgress = buf.currentProgress();
                 if (flushProgress != lastFlushProgress) {
+                    // 上次缓存进度不同，重新记录
                     lastFlushProgress = flushProgress;
 
                     if (!first) {
@@ -493,19 +505,25 @@ public class IdleStateHandler extends ChannelDuplexHandler {
             }
 
             if (nextDelay <= 0) {
+                // 表示空闲超时
                 // Reader is idle - set a new timeout and notify the callback.
+                // readerIdleTimeout 是 ScheduledFuture<?> 类型
                 readerIdleTimeout = schedule(ctx, this, readerIdleTimeNanos, TimeUnit.NANOSECONDS);
 
                 boolean first = firstReaderIdleEvent;
                 firstReaderIdleEvent = false;
 
                 try {
+                    // 创建读空闲，传递后边的Handler
+                    // 传递first参数，业务层根据自己情况是否处理多次，自己决定。
                     IdleStateEvent event = newIdleStateEvent(IdleState.READER_IDLE, first);
+                    // 触发读超时事件
                     channelIdle(ctx, event);
                 } catch (Throwable t) {
                     ctx.fireExceptionCaught(t);
                 }
             } else {
+                // 重新创建一个空闲超时任务，用nextDelay时间。
                 // Read occurred before the timeout - set a new timeout with shorter delay.
                 readerIdleTimeout = schedule(ctx, this, nextDelay, TimeUnit.NANOSECONDS);
             }
@@ -524,6 +542,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
             long lastWriteTime = IdleStateHandler.this.lastWriteTime;
             long nextDelay = writerIdleTimeNanos - (ticksInNanos() - lastWriteTime);
             if (nextDelay <= 0) {
+                // 写空闲超时
                 // Writer is idle - set a new timeout and notify the callback.
                 writerIdleTimeout = schedule(ctx, this, writerIdleTimeNanos, TimeUnit.NANOSECONDS);
 
@@ -531,6 +550,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
                 firstWriterIdleEvent = false;
 
                 try {
+                    // 检查缓存区数据发生变化没
                     if (hasOutputChanged(ctx, first)) {
                         return;
                     }
@@ -541,6 +561,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
                     ctx.fireExceptionCaught(t);
                 }
             } else {
+                // 写空闲未超时，重新创建一个写空闲超时任务
                 // Write occurred before the timeout - set a new timeout with shorter delay.
                 writerIdleTimeout = schedule(ctx, this, nextDelay, TimeUnit.NANOSECONDS);
             }

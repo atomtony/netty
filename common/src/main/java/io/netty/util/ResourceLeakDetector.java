@@ -254,6 +254,7 @@ public class ResourceLeakDetector<T> {
         }
 
         if (level.ordinal() < Level.PARANOID.ordinal()) {
+            // 不是每次都tracking
             if ((PlatformDependent.threadLocalRandom().nextInt(samplingInterval)) == 0) {
                 reportLeak();
                 return new DefaultResourceLeak(obj, refQueue, allLeaks);
@@ -297,6 +298,7 @@ public class ResourceLeakDetector<T> {
                 break;
             }
 
+            // 判断有没有泄漏的关键
             if (!ref.dispose()) {
                 continue;
             }

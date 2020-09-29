@@ -97,7 +97,9 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
     protected class NioByteUnsafe extends AbstractNioUnsafe {
 
         private void closeOnRead(ChannelPipeline pipeline) {
+            // input 关闭了么？没有
             if (!isInputShutdown0()) {
+                // 判断是否支持半关？如果是，关闭读触发事件。
                 if (isAllowHalfClosure(config())) {
                     shutdownInput();
                     pipeline.fireUserEventTriggered(ChannelInputShutdownEvent.INSTANCE);
@@ -144,12 +146,16 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             boolean close = false;
             try {
                 do {
+                    // 分配byteBuf空间
                     byteBuf = allocHandle.allocate(allocator);
+                    // 读数据到byteBuf
                     allocHandle.lastBytesRead(doReadBytes(byteBuf));
+                    // 判断读取到的字节数，
                     if (allocHandle.lastBytesRead() <= 0) {
                         // nothing was read. release the buffer.
                         byteBuf.release();
                         byteBuf = null;
+                        // 判断读取到的字节数，字节数小于0表明连接关闭
                         close = allocHandle.lastBytesRead() < 0;
                         if (close) {
                             // There is nothing left to read as we received an EOF.
@@ -158,19 +164,27 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                         break;
                     }
 
+                    // 记录读次数
                     allocHandle.incMessagesRead(1);
                     readPending = false;
+                    // 把读取到的数据传播出去
+                    // 一次读数据完成，
                     pipeline.fireChannelRead(byteBuf);
                     byteBuf = null;
                 } while (allocHandle.continueReading());
 
+                // 记录这次读事件总共读了多少数据，计算下次分配大小
                 allocHandle.readComplete();
+                // 相当于完成本次读事件的处理，
+                // 一次读事件处理，一次读事件处理可能包含多次读数据操作，最多读数据16次。
                 pipeline.fireChannelReadComplete();
 
                 if (close) {
+                    // 关闭
                     closeOnRead(pipeline);
                 }
             } catch (Throwable t) {
+                // 异常关闭，触发了IO Exception
                 handleReadException(pipeline, byteBuf, t, close, allocHandle);
             } finally {
                 // Check if there is a readPending which was not processed yet.

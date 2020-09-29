@@ -353,6 +353,7 @@ public final class ChannelOutboundBuffer {
             } else { // readableBytes > writtenBytes
                 if (writtenBytes != 0) {
                     buf.readerIndex(readerIndex + (int) writtenBytes);
+                    // 对未写完的数据进行标记
                     progress(writtenBytes);
                 }
                 break;

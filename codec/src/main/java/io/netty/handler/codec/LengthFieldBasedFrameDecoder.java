@@ -402,7 +402,9 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
             return null;
         }
 
+        // 拿到长度字段的实际字节偏移
         int actualLengthFieldOffset = in.readerIndex() + lengthFieldOffset;
+        // 根据实际偏移量读取长度字段的值
         long frameLength = getUnadjustedFrameLength(in, actualLengthFieldOffset, lengthFieldLength, byteOrder);
 
         if (frameLength < 0) {

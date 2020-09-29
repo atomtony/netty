@@ -233,6 +233,7 @@ public abstract class Recycler<T> {
                 throw new IllegalStateException("recycled already");
             }
 
+            // 释放用完的对象到迟里面去
             stack.push(this);
         }
     }

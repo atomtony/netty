@@ -516,10 +516,13 @@ public class GlobalChannelTrafficShapingHandler extends AbstractTrafficShapingHa
 
     @Override
     public void channelRead(final ChannelHandlerContext ctx, final Object msg) throws Exception {
+        // 如果TS的handler放错了位置，接受的不是 byte buffer之类的，则直接跳过了
         long size = calculateSize(msg);
         long now = TrafficCounter.milliSecondFromNano();
+        // 当数据不是bytebuffer时，size计算出来是-1,所以不会走流量整形里面，所以handler的位置很重要
         if (size > 0) {
             // compute the number of ms to wait before reopening the channel
+            // 计算需要等待多久
             long waitGlobal = trafficCounter.readTimeToWait(size, getReadLimit(), maxTime, now);
             Integer key = ctx.channel().hashCode();
             PerChannel perChannel = channelQueues.get(key);
@@ -554,6 +557,7 @@ public class GlobalChannelTrafficShapingHandler extends AbstractTrafficShapingHa
                             + isHandlerActive(ctx));
                 }
                 if (config.isAutoRead() && isHandlerActive(ctx)) {
+                    // 设；值autoread标记，并且移除“读”兴趣
                     config.setAutoRead(false);
                     channel.attr(READ_SUSPENDED).set(true);
                     // Create a Runnable to reactive the read if needed. If one was create before it will just be
@@ -564,6 +568,7 @@ public class GlobalChannelTrafficShapingHandler extends AbstractTrafficShapingHa
                         reopenTask = new ReopenReadTimerTask(ctx);
                         attr.set(reopenTask);
                     }
+                    // 过wait时间后，重新打开“读”功能
                     ctx.executor().schedule(reopenTask, wait, TimeUnit.MILLISECONDS);
                     if (logger.isDebugEnabled()) {
                         logger.debug("Suspend final status => " + config.isAutoRead() + ':'
@@ -662,6 +667,7 @@ public class GlobalChannelTrafficShapingHandler extends AbstractTrafficShapingHa
             PerChannel perChannel = channelQueues.get(key);
             long wait = 0;
             if (perChannel != null) {
+                // 计算等时间
                 wait = perChannel.channelTrafficCounter.writeTimeToWait(size, writeChannelLimit, maxTime, now);
                 if (writeDeviationActive) {
                     // now try to balance between the channels
@@ -685,11 +691,13 @@ public class GlobalChannelTrafficShapingHandler extends AbstractTrafficShapingHa
                     logger.debug("Write suspend: " + wait + ':' + ctx.channel().config().isAutoRead() + ':'
                             + isHandlerActive(ctx));
                 }
+                // 延迟wait时间后，继续写
                 submitWrite(ctx, msg, size, wait, now, promise);
                 return;
             }
         }
         // to maintain order of write
+        // 这个地方delay是0,表示不等带
         submitWrite(ctx, msg, size, 0, now, promise);
     }
 
@@ -697,6 +705,7 @@ public class GlobalChannelTrafficShapingHandler extends AbstractTrafficShapingHa
     protected void submitWrite(final ChannelHandlerContext ctx, final Object msg,
             final long size, final long writedelay, final long now,
             final ChannelPromise promise) {
+        // 步骤1：根据channel的key，获取对应的存delay数据的queue，没有则创建
         Channel channel = ctx.channel();
         Integer key = channel.hashCode();
         PerChannel perChannel = channelQueues.get(key);
@@ -710,6 +719,8 @@ public class GlobalChannelTrafficShapingHandler extends AbstractTrafficShapingHa
         boolean globalSizeExceeded = false;
         // write operations need synchronization
         synchronized (perChannel) {
+            // 步骤2：判断是否需要delay，如果不需要且queue中无数据，直接发
+            // 如果queue有数据，即使不需要delay，也要将数据入queue，因为需要保持顺序
             if (writedelay == 0 && perChannel.messagesQueue.isEmpty()) {
                 trafficCounter.bytesRealWriteFlowControl(size);
                 perChannel.channelTrafficCounter.bytesRealWriteFlowControl(size);
@@ -717,14 +728,20 @@ public class GlobalChannelTrafficShapingHandler extends AbstractTrafficShapingHa
                 perChannel.lastWriteTimestamp = now;
                 return;
             }
+            // 步骤3：预计deley时间过长，则最多等待15秒(maxTime)
             if (delay > maxTime && now + delay - perChannel.lastWriteTimestamp > maxTime) {
                 delay = maxTime;
             }
+            // 步骤4：数据进入queue
             newToSend = new ToSend(delay + now, msg, size, promise);
+            // 不管什么情况，都直接入queue，所以可能会OOM，所以后面要根据queue的情况，改变可写标记位
             perChannel.messagesQueue.addLast(newToSend);
             perChannel.queueSize += size;
+            // 上下2个queueSize不一样，上面少个s，代表channel上的queue，下面global的
             queuesSize.addAndGet(size);
+            // 步骤5：判断queue的数据太多，如果是，设置写状态为不可写
             checkWriteSuspend(ctx, delay, perChannel.queueSize);
+            // 判断global的queues（所有queue加一起结果）size超标
             if (queuesSize.get() > maxGlobalWriteSize) {
                 globalSizeExceeded = true;
             }
@@ -732,6 +749,7 @@ public class GlobalChannelTrafficShapingHandler extends AbstractTrafficShapingHa
         if (globalSizeExceeded) {
             setUserDefinedWritability(ctx, false);
         }
+        // 步骤6：开始schedule一个task来等待delay的时间再来发
         final long futureNow = newToSend.relativeTimeAction;
         final PerChannel forSchedule = perChannel;
         ctx.executor().schedule(new Runnable() {

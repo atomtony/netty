@@ -578,6 +578,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     private void processSelectedKeys() {
         if (selectedKeys != null) {
+            // 优化的处理
             processSelectedKeysOptimized();
         } else {
             processSelectedKeysPlain(selector.selectedKeys());
@@ -594,8 +595,11 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     void cancel(SelectionKey key) {
+        // 没有特殊情况（配置 so linger）,下面这个cancel：实际没有”执行“，因为关闭channel的时候执行过了
         key.cancel();
         cancelledKeys ++;
+        // 下面是优化： 当处理一批事件时，发现很多链接都断开了（默认256）
+        // 这个时候后面的事件可能都失效了，所以不妨 select again 下
         if (cancelledKeys >= CLEANUP_INTERVAL) {
             cancelledKeys = 0;
             needsToSelectAgain = true;
@@ -653,6 +657,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             selectedKeys.keys[i] = null;
 
             // 获取当前附加对象
+            // selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this) 。
+            // register 的第三个参数就是 attachment
+            // 这个获取 attachment 其实是 NioServerSocketChannel 或者 NioSocketChannel
             final Object a = k.attachment();
 
             if (a instanceof AbstractNioChannel) {
@@ -730,6 +737,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
             // 判断接收和读操作
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
+                // 正常关闭连接是通过 SelectionKey.OP_READ
                 unsafe.read();
             }
         } catch (CancelledKeyException ignored) {
@@ -762,7 +770,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     private void closeAll() {
-        selectAgain();
+        selectAgain();// 这里的目标是为了去除canceled的key
         Set<SelectionKey> keys = selector.keys();
         Collection<AbstractNioChannel> channels = new ArrayList<AbstractNioChannel>(keys.size());
         for (SelectionKey k: keys) {

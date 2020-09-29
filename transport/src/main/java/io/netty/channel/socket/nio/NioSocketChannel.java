@@ -366,10 +366,12 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         // By default we track the SO_SNDBUF when ever it is explicitly set. However some OSes may dynamically change
         // SO_SNDBUF (and other characteristics that determine how much data can be written at once) so we should try
         // make a best effort to adjust as OS behavior changes.
+        // 一次写完成了，所以扩大一次写入的数据量
         if (attempted == written) {
             if (attempted << 1 > oldMaxBytesPerGatheringWrite) {
                 ((NioSocketChannelConfig) config).setMaxBytesPerGatheringWrite(attempted << 1);
             }
+        // 一次写不完成，所以缩小尝试写入的量
         } else if (attempted > MAX_BYTES_PER_GATHERING_WRITE_ATTEMPTED_LOW_THRESHOLD && written < attempted >>> 1) {
             ((NioSocketChannelConfig) config).setMaxBytesPerGatheringWrite(attempted >>> 1);
         }
@@ -389,6 +391,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
 
             // Ensure the pending writes are made of ByteBufs only.
             int maxBytesPerGatheringWrite = ((NioSocketChannelConfig) config).getMaxBytesPerGatheringWrite();
+            // 最多返回1024个字节，总的四则尽量不超过maxBytesPerGatheringWrite
             ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);
             int nioBufferCnt = in.nioBufferCount();
 
@@ -405,13 +408,20 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     // to check if the total size of all the buffers is non-zero.
                     ByteBuffer buffer = nioBuffers[0];
                     int attemptedBytes = buffer.remaining();
+                    // 单个数据，直接调用socket的write方法
+                    // localWrittenBytes 表示输出数据的大小
                     final int localWrittenBytes = ch.write(buffer);
                     if (localWrittenBytes <= 0) {
+                        // localWrittenBytes <= 0 表示写不出数据
+                        // 注册一个OP_WRITE事件，当能写进去时，通知再次写
                         incompleteWrite(true);
                         return;
                     }
+                    // 自动调整写出的大小
                     adjustMaxBytesPerGatheringWrite(attemptedBytes, localWrittenBytes, maxBytesPerGatheringWrite);
+                    // 从ChanneloutboundBuffer中移除已经写除的数据
                     in.removeBytes(localWrittenBytes);
+                    // 写次数减1,writeSpinCount此值默认为16
                     --writeSpinCount;
                     break;
                 }
@@ -420,6 +430,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     // to check if the total size of all the buffers is non-zero.
                     // We limit the max amount to int above so cast is safe
                     long attemptedBytes = in.nioBufferSize();
+                    // 批量数据写
                     final long localWrittenBytes = ch.write(nioBuffers, 0, nioBufferCnt);
                     if (localWrittenBytes <= 0) {
                         incompleteWrite(true);
@@ -435,6 +446,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
             }
         } while (writeSpinCount > 0);
 
+        // 写了16次数据，还是没有写完，直接schedule一个新的flush task出来，而不是注册写事件。
         incompleteWrite(writeSpinCount < 0);
     }
 
@@ -452,6 +464,9 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     // because we try to read or write until the actual close happens which may be later due
                     // SO_LINGER handling.
                     // See https://github.com/netty/netty/issues/4449
+                    // 需要逗留到数据收发完成设置的时间，所以提交到另外Executor中执行
+                    // 提前deregister掉，逗留期不接受新的数据了
+                    // deregister 包含 selection key 的 cancel 的原因
                     doDeregister();
                     return GlobalEventExecutor.INSTANCE;
                 }
@@ -485,9 +500,12 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
 
         @Override
         public <T> boolean setOption(ChannelOption<T> option, T value) {
+            // 两种设置KEEPALIVE的方法
+            // 方法1，这个方法比较好
             if (PlatformDependent.javaVersion() >= 7 && option instanceof NioChannelOption) {
                 return NioChannelOption.setOption(jdkChannel(), (NioChannelOption<T>) option, value);
             }
+            // 方法2，需要添加很多if else条件判断
             return super.setOption(option, value);
         }
 

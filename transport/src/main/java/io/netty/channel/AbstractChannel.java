@@ -245,6 +245,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     @Override
     public ChannelFuture bind(SocketAddress localAddress, ChannelPromise promise) {
+        // 从 pipeline.tail.bind 一直链式执行到 pipeline.head.bind 方法
         return pipeline.bind(localAddress, promise);
     }
 
@@ -275,6 +276,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
     @Override
     public Channel read() {
+        // 从匹配
         pipeline.read();
         return this;
     }
@@ -493,6 +495,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+                // 第一次 Register 并不是监听 OP_ACCEPT,而是 0:
+                // selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this)
                 doRegister();
                 neverRegistered = false;
                 registered = true;
@@ -501,10 +505,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // user may already fire events through the pipeline in the ChannelFutureListener.
                 pipeline.invokeHandlerAddedIfNeeded();
 
+                // 通知注册成功，然后进行bind操作
                 safeSetSuccess(promise);
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
+                // server socket的注册不会走进下面的if，server socket 接受连接创建的socket可以进去，
+                // 因为accept后就active了
                 if (isActive()) {
                     if (firstRegistration) {
                         pipeline.fireChannelActive();
@@ -547,6 +554,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             boolean wasActive = isActive();
             try {
+                // 绑定 javaChannel().bind(localAddress, config.getBacklog());
                 doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
@@ -554,10 +562,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
+            // 绑定后，才开始激活
             if (!wasActive && isActive()) {
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {
+                        // 最终监听 OP_ACCEPT 是通过 bind 完成后的 fireChannelActive() 来触发的。
                         pipeline.fireChannelActive();
                     }
                 });
@@ -705,6 +715,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             final boolean wasActive = isActive();
             final ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+            // 不接受消息
             this.outboundBuffer = null; // Disallow adding any messages and flushes to outboundBuffer.
             Executor closeExecutor = prepareToClose();
             if (closeExecutor != null) {
@@ -713,6 +724,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     public void run() {
                         try {
                             // Execute the close.
+                            // 走到这，说明solinger(单位：秒)设置了，Close会阻塞一定时间/或数据处理完毕再关闭
                             doClose0(promise);
                         } finally {
                             // Call invokeLater so closeAndDeregister is executed in the EventLoop again!
@@ -881,6 +893,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
+            // 当进行write时，不进行flush操作，那么数据是先进行缓存到outboundBuffer中
             outboundBuffer.addMessage(msg, size, promise);
         }
 
